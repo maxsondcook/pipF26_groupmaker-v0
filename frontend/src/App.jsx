@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import Survey from './Survey.jsx'
 
 export default function App() {
   const [roster, setRoster] = useState(null)
   const [groups, setGroups] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [groupSize, setGroupSize] = useState(4)
+  const [page, setPage] = useState('home')
 
   useEffect(() => {
     fetch('/api/roster')
@@ -23,7 +26,7 @@ export default function App() {
       const res = await fetch('/api/groups/randomize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ group_size: 4 }),
+        body: JSON.stringify({ group_size: groupSize }),
       })
       if (!res.ok) throw new Error(`Backend responded ${res.status}`)
       const data = await res.json()
@@ -55,14 +58,37 @@ export default function App() {
     )
   }
 
+  if (page === 'survey') {
+    return <Survey roster={roster} onBack={() => setPage('home')} />
+  }
+
   return (
     <main className="page">
       <h1>GroupMaker</h1>
       <p className="subtitle">{roster.course}</p>
-
-      <button className="randomize" onClick={randomize} disabled={loading}>
-        {loading ? 'Randomizing…' : 'Randomize Groups'}
+      <button className="nav-link" type="button" onClick={() => setPage('survey')}>
+        Survey
       </button>
+
+      <div className="controls">
+        <label htmlFor="group-size">
+          Group size
+          <select
+            id="group-size"
+            value={groupSize}
+            onChange={(e) => setGroupSize(Number(e.target.value))}
+          >
+            {[4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="randomize" onClick={randomize} disabled={loading}>
+          {loading ? 'Randomizing…' : 'Randomize Groups'}
+        </button>
+      </div>
 
       {groups ? (
         <section className="groups">

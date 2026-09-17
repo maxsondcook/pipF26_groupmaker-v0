@@ -4,14 +4,27 @@ Serves the roster, randomizes groups, and (in production) serves the
 built frontend from frontend/dist.
 """
 
+import csv
 import json
 import os
 import random
+from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, send_from_directory
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "roster.json")
+SURVEY_FILE = os.path.join(os.path.dirname(__file__), "data", "survey_responses.csv")
+
+SURVEY_COLUMNS = [
+    "name",
+    "school_year",
+    "interests",
+    "python_experience",
+    "pick_a_partner",
+]
+SCHOOL_YEARS = ["First-year", "Sophomore", "Junior", "Senior", "Other"]
+PYTHON_EXPERIENCE = ["Yes", "No"]
 
 app = Flask(__name__, static_folder=None)
 
@@ -44,6 +57,49 @@ def randomize_groups():
             groups[i % len(groups)].append(student)
 
     return jsonify({"groups": [{"number": i + 1, "members": g} for i, g in enumerate(groups)]})
+
+
+@app.post("/api/survey")
+def submit_survey():
+    body = request.get_json(silent=True) or {}
+    roster_names = {s["name"] for s in load_roster()["students"]}
+
+    name = str(body.get("name") or "").strip()
+    school_year = str(body.get("school_year") or "").strip()
+    interests = str(body.get("interests") or "").strip()
+    python_experience = str(body.get("python_experience") or "").strip()
+    pick_a_partner = str(body.get("pick_a_partner") or "").strip()
+
+    missing = []
+    if not name or name not in roster_names:
+        missing.append("name")
+    if school_year not in SCHOOL_YEARS:
+        missing.append("school_year")
+    if not interests:
+        missing.append("interests")
+    if python_experience not in PYTHON_EXPERIENCE:
+        missing.append("python_experience")
+
+    if missing:
+        return jsonify({"error": "Missing or invalid fields", "fields": missing}), 400
+
+    row = {
+        "name": name,
+        "school_year": school_year,
+        "interests": interests,
+        "python_experience": python_experience,
+        "pick_a_partner": pick_a_partner,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    file_exists = os.path.isfile(SURVEY_FILE) and os.path.getsize(SURVEY_FILE) > 0
+    with open(SURVEY_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=SURVEY_COLUMNS + ["submitted_at"])
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+    return jsonify({"ok": True})
 
 
 # ---- Serve the built frontend (production) ----------------------------------
